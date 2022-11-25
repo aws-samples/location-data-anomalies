@@ -1,17 +1,13 @@
-## My Project
+# Location Data Anomalies
 
-TODO: Fill this README out!
+## About this Solution
+This solution was built in conjunction with AWS Re:Invent 2022 for a chalk talk titled "How to build location-aware workflows to detect data anomalies" delivered by Matt Nightingale and Drishti Arora.
 
-Be sure to:
+The solution is intended as quickstart guide for an ETL (Extract, Transform, Load) workflow that uses AWS Glue DataBrew, AWS Glue ETL Jobs (Python), and Amazon Location Service to flag and enrich location data anomalies. 
 
-* Change the title in this README
-* Edit your repository description on GitHub
+## Solution Architecture
+<img width="1061" alt="Screen Shot 2022-11-25 at 11 56 57 AM" src="https://user-images.githubusercontent.com/73195085/204029411-ec2dc7ac-be46-4a6e-bdc1-fe40772f2783.png">
 
-## Security
+## Getting Started
 
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
-
-## License
-
-This library is licensed under the MIT-0 License. See the LICENSE file.
 

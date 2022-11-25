@@ -1,0 +1,527 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  SolutionS3BucketNameSuffix:
+    Type: String
+    Description: "Suffix for S3 bucket to be created for storing the solution data files and script file. S3 bucket names needs to be unique globally - please use a suffix that would make the bucket name unique."
+    AllowedPattern: "[a-zA-Z][a-zA-Z0-9_-]*"
+    Default: "data-script-store"
+  SourceS3Bucket:
+    Description: "!Please do not change. Source Bucket in AWS blogteam account from where the demo data and script files will be copied."
+    Type: String
+    Default: 'location-anomaly-resources'
+  SourceS3BasePrefix:
+    Description: "!Please do not change. Source path in AWS blogteam account from where the demo data and script files will be copied."
+    Type: String
+    Default: 'artifacts/'    
+  DataS3Keys:
+    Description: "S3 keys that will be copied"
+    Type: String
+    Default: 'source/las_vegas_yelp_business.csv, source/boto3-1.26.15-py3-none-any.whl' #'source/citibike/2021-02/JC-202102-citibike-tripdata.csv, source/citibike/2021-03/JC-202103-citibike-tripdata.csv'
+  GlueETLJobFileKey:
+    Description: "Key of the Glue ETL Job file"  
+    Type: String
+    Default: "scripts/glue-etl.py"
+  LocationIndex:
+    Description: "Input a name for your Amazon location service index" 
+    Type: String
+    Default: places-index
+
+Resources:
+  AmazonLocationIndex:  
+    Type: AWS::Location::PlaceIndex
+    Properties: 
+      DataSource: Here
+      Description: Place index for Amazon Location Service Using Here
+      IndexName: !Sub '${AWS::StackName}-${LocationIndex}'
+      PricingPlan: RequestBasedUsage
+
+  SolutionS3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-${SolutionS3BucketNameSuffix}'
+      AccessControl: 'BucketOwnerRead'
+
+  GlueDataBrewAndETLPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub ${AWS::StackName}-Glue-DataBrew-ETL-job-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+              - "s3:PutObject"
+              - "s3:DeleteObject"
+              - "s3:ListBucket"
+              - "geo:SearchPlaceIndexForSuggestions"
+              - "geo:SearchPlaceIndexForPosition"
+              - "geo:SearchPlaceIndexForText"
+            Resource:
+              - !GetAtt AmazonLocationIndex.Arn
+              - !GetAtt SolutionS3Bucket.Arn
+              - !Join
+                  - ""
+                  - - "arn:aws:s3:::"
+                    - !Ref SolutionS3Bucket
+                    - "/*"
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"              
+            Resource:
+              - "arn:aws:logs:*:*:log-group:/aws-glue/jobs/*"              
+
+  GlueDataBrewAndETLRole:
+    Type: AWS::IAM::Role
+    DependsOn: GlueDataBrewAndETLPolicy
+    Properties:
+      Path: "/service-role/"
+      AssumeRolePolicyDocument: "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":[\"databrew.amazonaws.com\", \"glue.amazonaws.com\"]},\"Action\":\"sts:AssumeRole\"}]}"
+      MaxSessionDuration: 3600
+      ManagedPolicyArns:
+        - !Ref GlueDataBrewAndETLPolicy
+        - "arn:aws:iam::aws:policy/service-role/AWSGlueDataBrewServiceRole"
+      RoleName: !Sub ${AWS::StackName}-GlueDataBrewAndETLRole   
+   
+  S3CustomResource:
+    Type: Custom::S3CustomResource
+    Properties:
+      ServiceToken: !GetAtt LambdaFunction.Arn
+      source_bucket: !Ref SourceS3Bucket
+      source_s3_prefix: !Ref SourceS3BasePrefix
+      source_keys:  !Join 
+            - ","
+            - - !Ref DataS3Keys
+              - !Ref GlueETLJobFileKey      
+      target_bucket: !Ref SolutionS3Bucket
+
+  LambdaFunction:
+     Type: "AWS::Lambda::Function"
+     Properties:
+       Description: "Copies source files and script files into source folder of solution S3 Buckets!"
+       FunctionName: !Sub '${AWS::StackName}-content-copy-lambda'
+       Handler: index.handler
+       Role: !GetAtt LambdaExecutionRole.Arn
+       Timeout: 360
+       Runtime: python3.8
+       Code:
+         ZipFile: |
+          import boto3
+          import cfnresponse
+          def handler(event, context):
+            # Init ...
+            print(event)
+            the_event = event['RequestType']
+            print("The event is: ", str(the_event))
+            response_data = {}
+            s3 = boto3.resource('s3')
+            # Retrieve parameters
+            source_bucket = event['ResourceProperties']['source_bucket']
+            source_s3_prefix = event['ResourceProperties']['source_s3_prefix']
+            source_keys = event['ResourceProperties']['source_keys']
+            source_key_list = [k.strip() for k in source_keys.split(',')]            
+            target_bucket = event['ResourceProperties']['target_bucket']
+            try:
+                if the_event in ('Create', 'Update'):
+                    print("copy files")
+                    src_bucket_obj = s3.Bucket(source_bucket)
+                    for key in source_key_list:
+                      source_key = f'{source_s3_prefix}/{key}'.replace('//','/')
+                      s3.meta.client.copy_object(
+                          Bucket=target_bucket,
+                          CopySource={'Bucket': source_bucket, 'Key': source_key},
+                          Key=key
+                      )
+                elif the_event == 'Delete':
+                    print("Deleting S3 content...")
+                    b_operator = boto3.resource('s3')
+                    b_operator.Bucket(str(target_bucket)).objects.all().delete()
+                # Everything OK... send the signal back
+                print("Execution succesfull!")
+                cfnresponse.send(event,
+                                context,
+                                cfnresponse.SUCCESS,
+                                response_data)
+            except Exception as e:
+                print("Execution failed...")
+                print(str(e))
+                response_data['Data'] = str(e)
+                cfnresponse.send(event,
+                                context,
+                                cfnresponse.FAILED,
+                                response_data)
+    
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+        Version: '2012-10-17'
+      Path: "/"
+      Policies:
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Effect: Allow
+            Resource: arn:aws:logs:*:*:*
+          Version: '2012-10-17'
+        PolicyName: !Sub ${AWS::StackName}-${AWS::Region}-AWSLambda-CW
+      - PolicyDocument:
+          Statement:
+          - Action:
+            - s3:PutObject
+            - s3:DeleteObject
+            - s3:Get*
+            - s3:List*
+            Effect: Allow
+            Resource:
+            - !Sub arn:aws:s3:::${SourceS3Bucket}/*
+            - !Sub arn:aws:s3:::${SourceS3Bucket}
+            - !Sub arn:aws:s3:::${SolutionS3Bucket}/*
+            - !Sub arn:aws:s3:::${SolutionS3Bucket}
+          Version: '2012-10-17'
+        PolicyName: !Sub ${AWS::StackName}-${AWS::Region}-AWSLambda-S3
+      RoleName: !Sub ${AWS::StackName}-LambdaExecutionRole   
+
+  DatabrewDataset:
+    Type: AWS::DataBrew::Dataset
+    Properties: 
+      Name: !Sub '${AWS::StackName}-dataset'
+      Format: 
+        'CSV'
+      FormatOptions: 
+        Csv:
+          Delimiter: ','
+          HeaderRow: Yes
+      Input: 
+        S3InputDefinition: 
+          Bucket: !Ref SolutionS3Bucket
+          Key: !Sub 'source/las_vegas_yelp_business.csv'
+      # PathOptions: 
+      #   Parameters:
+      #   - DatasetParameter: 
+      #       Name: !Ref PathParameter
+      #       Type: String
+      #     PathParameterName: !Ref PathParameter
+
+  DataBrewRecipes:
+    Type: AWS::DataBrew::Recipe
+    Properties: 
+      Description: Recipe for identifyin location data anomalies
+      Name: !Sub '${AWS::StackName}-recipe'
+      Steps:
+        - Action:
+            Operation: REMOVE_DUPLICATES
+            Parameters:
+              sourceColumn: latitude
+        - Action:
+            Operation: REMOVE_DUPLICATES
+            Parameters:
+              sourceColumn: longitude
+        - Action:
+            Operation: FLAG_OUTLIERS
+            Parameters:
+              outlierStrategy: Z_SCORE
+              sourceColumn: latitude
+              targetColumn: latitude_outlier_flagged
+              threshold: '3'
+        - Action:
+            Operation: FLAG_OUTLIERS
+            Parameters:
+              outlierStrategy: Z_SCORE
+              sourceColumn: longitude
+              targetColumn: longitude_outlier_flagged
+              threshold: '3'
+        - Action:
+            Operation: REMOVE_COMBINED
+            Parameters:
+              collapseConsecutiveWhitespace: 'false'
+              removeAllPunctuation: 'false'
+              removeAllQuotes: 'false'
+              removeAllWhitespace: 'false'
+              removeCustomCharacters: 'false'
+              removeCustomValue: 'false'
+              removeLeadingAndTrailingPunctuation: 'false'
+              removeLeadingAndTrailingQuotes: 'true'
+              removeLeadingAndTrailingWhitespace: 'false'
+              removeLetters: 'false'
+              removeNumbers: 'false'
+              removeSpecialCharacters: 'false'
+              sourceColumn: name
+        - Action:
+            Operation: REMOVE_COMBINED
+            Parameters:
+              collapseConsecutiveWhitespace: 'false'
+              removeAllPunctuation: 'false'
+              removeAllQuotes: 'false'
+              removeAllWhitespace: 'false'
+              removeCustomCharacters: 'false'
+              removeCustomValue: 'false'
+              removeLeadingAndTrailingPunctuation: 'false'
+              removeLeadingAndTrailingQuotes: 'true'
+              removeLeadingAndTrailingWhitespace: 'false'
+              removeLetters: 'false'
+              removeNumbers: 'false'
+              removeSpecialCharacters: 'false'
+              sourceColumn: address
+        - Action:
+            Operation: FLAG_COLUMN_FROM_NULL
+            Parameters:
+              sourceColumn: address
+              targetColumn: address_EXISTS_flagged
+        - Action:
+            Operation: FLAG_COLUMN_FROM_PATTERN
+            Parameters:
+              pattern: \d{1,5}\s\w.\s(\b\w*\b\s){1,2}\w*\.
+              sourceColumn: address
+              targetColumn: address_REGEX_flagged
+
+
+  DataBrewProject:
+    DependsOn:
+      - S3CustomResource
+    Type: AWS::DataBrew::Project
+    Properties: 
+      Name: !Sub '${AWS::StackName}-project'
+      DatasetName: !Ref DatabrewDataset
+      RecipeName: !Ref DataBrewRecipes
+      RoleArn: !GetAtt GlueDataBrewAndETLRole.Arn
+      Sample:
+        Size: 500
+        Type: FIRST_N
+
+  DataBrewJob:
+    Type: AWS::DataBrew::Job
+    Properties:
+      Name: !Sub '${AWS::StackName}-job'
+      Type: RECIPE
+      ProjectName: !Ref DataBrewProject
+      RoleArn: !GetAtt GlueDataBrewAndETLRole.Arn
+      LogSubscription: ENABLE
+      MaxCapacity: 2
+      MaxRetries: 0
+      Outputs:
+        - Format: CSV
+          Location:
+            Bucket: !Ref SolutionS3Bucket
+            Key: !Sub 'cleaned/artifacts/'
+          Overwrite: true
+          MaxOutputFiles: 1
+          PartitionColumns: []
+      
+  GlueETLJob:
+    Type: AWS::Glue::Job
+    Properties:
+      Role: !Ref GlueDataBrewAndETLRole
+      Name: !Sub '${AWS::StackName}-${AWS::Region}-glue-etl-job'
+      GlueVersion: 2.0
+      Command: 
+        Name : "glueetl"
+        ScriptLocation: !Sub "s3://${SolutionS3Bucket}/${GlueETLJobFileKey}"
+      DefaultArguments: 
+        "--input_path": !Sub cleaned/artifacts/${AWS::StackName}-job_part00000.csv
+        "--output_bucket": !Sub "${SolutionS3Bucket}"
+        "--s3_output_key": !Sub "processed/las_vegas/output.csv"
+        "--location_index": !Ref AmazonLocationIndex
+        "--additional-python-modules": !Sub "s3://${SolutionS3Bucket}/source/boto3-1.26.15-py3-none-any.whl"
+      MaxRetries: 0
+      Description: "Process data."
+      AllocatedCapacity: 3
+      Timeout: 60
+
+
+  StepFunctionExecutionRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - states.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Policies:
+        -
+          PolicyName: "StatesExecutionPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: "Allow"
+                Action: ["glue:*"]
+                Resource: "*"
+              -
+                Effect: "Allow"
+                Action: ["databrew:*"]
+                Resource: "*"  
+      Path: "/" 
+      RoleName: !Sub ${AWS::StackName}-StepFunctionExecutionRole
+
+  StepFunctionStateMachin:
+    Type: "AWS::StepFunctions::StateMachine"
+    Properties:
+      StateMachineName: !Sub '${AWS::StackName}-${AWS::Region}-state-machine'
+      DefinitionString:
+        Fn::Sub:
+        - |-
+            {
+              "Comment": "A Step Function Orchstrating a DataBrew and Glue ETL Job",
+              "StartAt": "DataBrewStep",
+              "States": {
+                "DataBrewStep": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::databrew:startJobRun.sync",
+                  "Parameters": {
+                    "Name": "${DataBrewJob}"
+                  },
+                  "ResultPath": "$.taskresult",
+                  "Next": "GlueStep"
+                },
+                "GlueStep": {
+                  "Type": "Task",
+                  "Resource": "arn:aws:states:::glue:startJobRun.sync",
+                  "Parameters": {
+                    "JobName": "${GlueETLJob}"
+                  },
+                  "End": true
+                }
+              }
+            }
+        - {
+          GlueETLJob: !Ref GlueETLJob,
+          DataBrewJob: !Ref DataBrewJob,
+          SolutionS3Bucket: !Ref SolutionS3Bucket
+        }
+      RoleArn: !GetAtt StepFunctionExecutionRole.Arn
+
+  GlueCrawlersRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - glue.amazonaws.com
+          Action:
+            - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: AthenaAccess
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Action: athena:*
+              Resource: '*'
+      - PolicyName: GlueS3Access
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Action:
+                - glue:*
+                - iam:ListRolePolicies
+                - iam:GetRole
+                - iam:GetRolePolicy
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - s3:GetBucketLocation
+                - s3:ListBucket
+                - s3:ListAllMyBuckets
+                - s3:GetBucketAcl
+                - s3:GetObject
+              Resource: 
+                - !Sub 'arn:aws:s3:::${SolutionS3Bucket}/*'
+                - !Sub 'arn:aws:s3:::${SolutionS3Bucket}'
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - 'arn:aws:s3:::crawler-public*'
+                - 'arn:aws:s3:::aws-glue-*'
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: 'arn:aws:logs:*:*:/aws-glue/*'
+      RoleName: !Sub ${AWS::StackName}-GlueCrawlersRole
+  GlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      DatabaseInput:
+        Description: 'Citibike database'
+        Name: !Sub '${AWS::StackName}-glue-database'
+      CatalogId: !Ref AWS::AccountId
+
+  GlueCrawlerSourceData:
+    DependsOn:
+      - GlueDatabase
+      - GlueCrawlersRole
+    Type: AWS::Glue::Crawler
+    Properties:
+      Role:
+        Fn::GetAtt: [ GlueCrawlersRole, Arn ]
+      Description: 'Las Vegas Source Data Crawler'
+      Schedule:
+        # Run crawler every day every 6 hours Monday to Friday
+        ScheduleExpression: 'cron(0 0/1 ? * MON-FRI *)'
+      DatabaseName: !Ref GlueDatabase
+      Targets:
+        S3Targets:
+          - Path:  !Sub '${SolutionS3Bucket}/source/las_vegas/'
+      TablePrefix: 'source_'
+      Name: !Sub '${AWS::StackName}-source-data-crawler'
+
+  GlueCrawlerCleanedData:
+    DependsOn:
+      - GlueDatabase
+      - GlueCrawlersRole
+    Type: AWS::Glue::Crawler
+    Properties:
+      Role:
+        Fn::GetAtt: [ GlueCrawlersRole, Arn ]
+      Description: 'Citibike Cleaned Data Crawler'
+      Schedule:
+        # Run crawler every day every 6 hours Monday to Friday
+        ScheduleExpression: 'cron(0 0/1 ? * MON-FRI *)'
+      DatabaseName: !Ref GlueDatabase
+      Targets:
+        S3Targets:
+          - Path:  !Sub '${SolutionS3Bucket}/cleaned/las_vegas/'
+      TablePrefix: 'cleaned_'
+      Name: !Sub '${AWS::StackName}-cleaned-data-crawler'
+
+  GlueCrawlerProcessedData:
+    DependsOn:
+      - GlueDatabase
+      - GlueCrawlersRole
+    Type: AWS::Glue::Crawler
+    Properties:
+      Role:
+        Fn::GetAtt: [ GlueCrawlersRole, Arn ]
+      Description: 'Citibike Processed Data Crawler'
+      Schedule:
+        # Run crawler every day every 6 hours Monday to Friday
+        ScheduleExpression: 'cron(0 0/1 ? * MON-FRI *)'
+      DatabaseName: !Ref GlueDatabase
+      Targets:
+        S3Targets:
+          - Path:  !Sub '${SolutionS3Bucket}/processed/las_vegas/'
+      TablePrefix: 'processed_'
+      Name: !Sub '${AWS::StackName}-processed-data-crawler'

@@ -9,7 +9,7 @@ This repository contains a Cloud Formation Template that is intended as quicksta
 
 To demonstrate the solution, we prepare and transform a portion of the publically available Yelp dataset from Kaggle, focusing on location data for businesses in Las Vegas, NV.
 
-You can access and download the portion of the dataset that will be used for this solution [here](https://location-anomaly-resources.s3.amazonaws.com/artifacts/source/las_vegas_yelp_business.csv), which will also be cloned into a new bucket in your AWS account by deploying the Cloud Formation Template in this repo.
+You can download and analyze the portion of the source dataset that will be used for this solution [by clicking this link](https://location-anomaly-resources.s3.amazonaws.com/artifacts/source/las_vegas_yelp_business.csv), which will also be cloned into a new bucket in your AWS account by deploying the Cloud Formation Template in this repo.
 
 ## Solution Architecture
 <img width="917" alt="Screen Shot 2022-11-27 at 4 30 43 PM" src="https://user-images.githubusercontent.com/73195085/204168522-595f0ba8-e023-4b87-8925-58e30e677c2e.png">

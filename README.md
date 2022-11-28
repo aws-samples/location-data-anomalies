@@ -18,7 +18,7 @@ You can access and download the portion of the dataset that will be used for thi
 1. An AWS Lambda function copys the source data and AWS Glue Scripts + Dependencies from an external AWS Account (owned by solution author) and copys them into a new Amazon S3 bucket in the deployment AWS Account.
 2. AWS Step Functions kicks off the anomaly workflow, creating an AWS Glue Data Brew Dataset and Project, which analyzes the source data using a Glue Databrew Recipe to flag anomalies. You can view the recipe [here]().
 3. AWS Glue Data Brew processes the flagged-anomaly-dataset and outputs it to S3, kicking off the AWS Glue ETL job.
-4. AWS Glue runs an ETL Job using a python script to call the Amazon Location Service Paces APIs on flagged anomalies in the new dataset.
+4. AWS Glue runs an ETL Job using a python script to call the Amazon Location Service Paces APIs on flagged anomalies in the new dataset. You can view the python script [here](https://github.com/aws-samples/location-data-anomalies/blob/main/glue-etl-script.py)
 5. The final dataset, with anomalies identified and Geocoded, are output into S3 as a final, processed dataset.
 
 

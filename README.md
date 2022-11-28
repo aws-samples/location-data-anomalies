@@ -7,7 +7,7 @@ This repository contains a Cloud Formation Template that is intended as quicksta
 
 ## Solution Architecture
 
-To demonstrate the solution, we prepare and transform a portion of the publically available ["Yelp dataset from Kaggle" src = https://www.kaggle.com/datasets/yelp-dataset/yelp-dataset?select=yelp_academic_dataset_business.json]
+To demonstrate the solution, we prepare and transform a portion of the publically available ["Yelp dataset from Kaggle"] (https://www.kaggle.com/datasets/yelp-dataset/yelp-dataset?select=yelp_academic_dataset_business.json)
 
 <img width="1061" alt="Screen Shot 2022-11-25 at 11 56 57 AM" src="https://user-images.githubusercontent.com/73195085/204029411-ec2dc7ac-be46-4a6e-bdc1-fe40772f2783.png">
 

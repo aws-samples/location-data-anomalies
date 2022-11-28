@@ -12,8 +12,14 @@ To demonstrate the solution, we prepare and transform a portion of the publicall
 You can access and download the portion of the dataset that will be used for this solution at this [link](s3://location-anomaly-resources/artifacts/source/las_vegas_yelp_business.csv), which will also be cloned into a new bucket in your AWS account by deploying the Cloud Formation Template in this repo.
 
 ## Solution Architecture
+<img width="917" alt="Screen Shot 2022-11-27 at 4 30 43 PM" src="https://user-images.githubusercontent.com/73195085/204168522-595f0ba8-e023-4b87-8925-58e30e677c2e.png">
 
-<img width="1061" alt="Screen Shot 2022-11-25 at 11 56 57 AM" src="https://user-images.githubusercontent.com/73195085/204029411-ec2dc7ac-be46-4a6e-bdc1-fe40772f2783.png">
+ 
+1. An AWS Lambda function copys the source data and AWS Glue Scripts + Dependencies from an external AWS Account (owned by solution author) and copys them into a new Amazon S3 bucket in the deployment AWS Account.
+2. AWS Step Functions kicks off the anomaly workflow, creating an AWS Glue Data Brew Dataset and Project, which analyzes the source data using a Glue Databrew Recipe to flag anomalies. You can view the recipe [here]().
+3. AWS Glue Data Brew processes the flagged-anomaly-dataset and outputs it to S3, kicking off the AWS Glue ETL job.
+4. AWS Glue runs an ETL Job using a python script to call the Amazon Location Service Paces APIs on flagged anomalies in the new dataset.
+5. The final dataset, with anomalies identified and Geocoded, are output into S3 as a final, processed dataset.
 
 
 

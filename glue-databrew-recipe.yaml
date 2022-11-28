@@ -1,0 +1,65 @@
+- Action:
+    Operation: REMOVE_DUPLICATES
+    Parameters:
+      sourceColumn: latitude
+- Action:
+    Operation: REMOVE_DUPLICATES
+    Parameters:
+      sourceColumn: longitude
+- Action:
+    Operation: FLAG_OUTLIERS
+    Parameters:
+      outlierStrategy: Z_SCORE
+      sourceColumn: latitude
+      targetColumn: latitude_outlier_flagged
+      threshold: '3'
+- Action:
+    Operation: FLAG_OUTLIERS
+    Parameters:
+      outlierStrategy: Z_SCORE
+      sourceColumn: longitude
+      targetColumn: longitude_outlier_flagged
+      threshold: '3'
+- Action:
+    Operation: REMOVE_COMBINED
+    Parameters:
+      collapseConsecutiveWhitespace: 'false'
+      removeAllPunctuation: 'false'
+      removeAllQuotes: 'false'
+      removeAllWhitespace: 'false'
+      removeCustomCharacters: 'false'
+      removeCustomValue: 'false'
+      removeLeadingAndTrailingPunctuation: 'false'
+      removeLeadingAndTrailingQuotes: 'true'
+      removeLeadingAndTrailingWhitespace: 'false'
+      removeLetters: 'false'
+      removeNumbers: 'false'
+      removeSpecialCharacters: 'false'
+      sourceColumn: name
+- Action:
+    Operation: REMOVE_COMBINED
+    Parameters:
+      collapseConsecutiveWhitespace: 'false'
+      removeAllPunctuation: 'false'
+      removeAllQuotes: 'false'
+      removeAllWhitespace: 'false'
+      removeCustomCharacters: 'false'
+      removeCustomValue: 'false'
+      removeLeadingAndTrailingPunctuation: 'false'
+      removeLeadingAndTrailingQuotes: 'true'
+      removeLeadingAndTrailingWhitespace: 'false'
+      removeLetters: 'false'
+      removeNumbers: 'false'
+      removeSpecialCharacters: 'false'
+      sourceColumn: address
+- Action:
+    Operation: FLAG_COLUMN_FROM_NULL
+    Parameters:
+      sourceColumn: address
+      targetColumn: address_EXISTS_flagged
+- Action:
+    Operation: FLAG_COLUMN_FROM_PATTERN
+    Parameters:
+      pattern: \d{1,5}\s\w.\s(\b\w*\b\s){1,2}\w*\.
+      sourceColumn: address
+      targetColumn: address_REGEX_flagged

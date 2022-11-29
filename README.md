@@ -23,7 +23,21 @@ To demonstrate the solution, we prepare and transform a portion of the publicall
 
 You can download and analyze the portion of the source dataset that will be used for this solution [by clicking this link](https://location-anomaly-resources.s3.amazonaws.com/artifacts/source/las_vegas_yelp_business.csv), which will also be cloned into a new bucket in your AWS account by deploying the Cloud Formation Template in this repo.
 
-##Deploying the solution 
+## Deploying the solution 
 
-1. To deploy this solution, simply upload the cloudformation.yaml file to your aws account. 
+1. To deploy this solution, simply create a new [cloudformation stack](https://console.aws.amazon.com/cloudformation/home) in your aws account and upload the cloudformationtemplate.yaml file.
+<img width="1050" alt="Screen Shot 2022-11-29 at 3 32 14 PM" src="https://user-images.githubusercontent.com/73195085/204671488-f7cb2405-8401-460a-adcf-e8e1bfad02a2.png">
+
+2. Verify the stack has been deployed successdfully.
+<img width="1127" alt="Screen Shot 2022-11-29 at 3 36 19 PM" src="https://user-images.githubusercontent.com/73195085/204672155-2035c381-e1e6-4d23-8318-f79d04c48ff1.png">
+
+3. Navigate to [AWS Step Functions](console.aws.amazon.com/states/home?), and Start the execution on the State Machine deployed by the CloudFormation Stack.
+<img width="1051" alt="Screen Shot 2022-11-29 at 3 42 20 PM" src="https://user-images.githubusercontent.com/73195085/204672929-1f0a12e6-a599-4c8b-8c80-16ed79670060.png">
+
+4. Once the state machine has executed successfully, navigate to the Amazon S3 bucket deployed by CloudFormation and and view the processed dataset. 
+<img width="1074" alt="Screen Shot 2022-11-29 at 3 46 41 PM" src="https://user-images.githubusercontent.com/73195085/204673477-c8958fdc-a20d-4783-8959-7ae81f100ba2.png">
+
+Congratulations! You have successfully processed location data anomalies using AWS Glue, AWS Glue DataBrew, and Amazon Location Service.
+
+Reach out to nghtm@amazon.com with any questions.
 

@@ -23,4 +23,7 @@ To demonstrate the solution, we prepare and transform a portion of the publicall
 
 You can download and analyze the portion of the source dataset that will be used for this solution [by clicking this link](https://location-anomaly-resources.s3.amazonaws.com/artifacts/source/las_vegas_yelp_business.csv), which will also be cloned into a new bucket in your AWS account by deploying the Cloud Formation Template in this repo.
 
+##Deploying the solution 
+
+1. To deploy this solution, simply upload the cloudformation.yaml file to your aws account. 
 
